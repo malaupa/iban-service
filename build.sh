@@ -1,13 +1,11 @@
 #/usr/bin/env bash
 CONFIGURATIONS=(
-    darwin,386 \
     windows,386 \
     windows,amd64 \
     linux,386 \
     linux,amd64 \
     linux,arm \
-    linux,arm64 \
-    solaris,amd64
+    linux,arm64
 )
 
 version=`cat VERSION`
@@ -19,18 +17,17 @@ set $config
 os="$1"
 arch="$2"
 base_path="build/$os/$arch"
-path="$base_path/goiban-service"
+path="$base_path/iban-service"
 mkdir -p "$path"
-bin_name="goiban-service"
+bin_name="iban-service"
 
 if [ $os = "windows" ]; then
     bin_name="$bin_name.exe"
 fi
 
 GOOS="$os" GOARCH="$arch" go build -ldflags "-X main.Version=${version}" -o "$path/$bin_name"
-cp -r $GOPATH/src/github.com/fourcube/goiban-data-loader/data "$path/"
-cp -r ./static "$path/"
-tar czvf "build/goiban-service-$version-$os-$arch.tar.gz" -C "$base_path" goiban-service
+cp -r data "$path/"
+tar czvf "build/iban-service-$version-$os-$arch.tar.gz" -C "$base_path" iban-service
 
 unset IFS;
 done

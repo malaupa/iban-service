@@ -1,0 +1,7 @@
+NL: https://www.betaalvereniging.nl/wp-content/uploads/BIC-lijst-NL.xlsx
+BE: https://www.nbb.be/de/zahlungssysteme/zahlungsnormen/bankidentifikationscodes (https://www.nbb.be/doc/be/be/protocol/r_fulllist_of_codes_current.xlsx)
+DE: https://www.bundesbank.de/de/aufgaben/unbarer-zahlungsverkehr/serviceangebot/bankleitzahlen/download---bankleitzahlen-602592  (https://www.bundesbank.de/resource/blob/602632/de8bc9ff83a50360ade75055734724aa/mL/blz-aktuell-txt-data.txt)
+LU: https://www.abbl.lu/topic/iban-and-bic-codes/ (https://www.abbl.lu/content/uploads/2019/05/IBAN_BIC_CODES_LUX_20210429.xlsx)
+CH: https://www.six-group.com/dam/download/banking-services/interbank-clearing/bc-bank-master/bcbankenstamm_d.xls
+LI: 
+AT: https://www.oenb.at/idakilz/kiverzeichnis (https://www.oenb.at/docroot/downloads_observ/sepa-zv-vz_gesamt.csv)

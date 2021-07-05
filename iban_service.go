@@ -1,3 +1,28 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2014 Chris Grieger
+Copyright (c) 2021 Stefan Schubert
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+*/
+
 package main
 
 import (
@@ -14,26 +39,13 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
-
+	"github.com/fourcube/goiban"
 	"github.com/fourcube/goiban-data"
 	"github.com/fourcube/goiban-data-loader/loader"
 
-	"github.com/fourcube/goiban"
-	m "github.com/fourcube/goiban-service/metrics"
 	"github.com/julienschmidt/httprouter"
 	"github.com/pmylund/go-cache"
 	"github.com/rs/cors"
-)
-
-const (
-	// SigningKey can be used to validate that the goiban-service binary
-	// has been signed by the original author
-	SigningKey = `-----BEGIN PUBLIC KEY-----
-MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEZGBXuKuau9Q+cnDCHsN48ovzopce+QcU
-qab1BAkJZXNdDHxEoQFnf72TYuzl3LjTsLuIA2tpx55sG79zgJHG6hyso7aUuQ+c
-vQrNHMoC/IHD9FkIqWrBH1xZe8LE9X9t
------END PUBLIC KEY-----`
 )
 
 /**
@@ -44,41 +56,30 @@ route							description
 /validate/{iban} 				Tries to validate {iban} and returns a HTTP response
 								in JSON. See goiban.ValidationResult for details of the
 								data returned.
-
-/*								Renders static content from the "./static" folder
 */
 var (
 	c   = cache.New(5*time.Minute, 30*time.Second)
 	err error
 
-	metrics      *m.KeenMetrics
-	inmemMetrics = m.NewInmemMetricsRegister()
-	repo         data.BankDataRepository
+	repo data.BankDataRepository
 	// Set at link time
 	Version string = "dev"
 	// Flags
-	dataPath        string
-	staticPath      string
-	mysqlURL        string
-	pidFile         string
-	port            string
-	help            bool
-	web             bool
-	printVersion    bool
-	printSigningKey bool
+	basePath     string = "data"
+	dataPath     string
+	pidFile      string
+	port         string
+	help         bool
+	printVersion bool
 )
 
 func init() {
 	flag.StringVar(&dataPath, "dataPath", "", "Base path of the bank data")
-	flag.StringVar(&staticPath, "staticPath", "", "Base path of the static web content")
-	flag.StringVar(&mysqlURL, "dbUrl", "", "Database connection string")
 	flag.StringVar(&pidFile, "pidFile", "", "PID File path")
 
 	flag.StringVar(&port, "port", "8080", "HTTP Port or interface to listen on")
 	flag.BoolVar(&help, "h", false, "Show usage")
 	flag.BoolVar(&printVersion, "v", false, "Show version")
-	flag.BoolVar(&printSigningKey, "k", false, "Show public key for signature validation")
-	flag.BoolVar(&web, "w", false, "Serve staticPath folder")
 }
 
 func main() {
@@ -94,50 +95,26 @@ func main() {
 		return
 	}
 
-	if printSigningKey {
-		fmt.Println(SigningKey)
-		return
-	}
-
 	if pidFile != "" {
 		CreatePidfile(pidFile)
-	}
-
-	if web && staticPath == "" {
-		// Try to serve from the package src directory
-		path := filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "fourcube", "goiban-service", "static")
-		f, err := os.Open(path)
-		defer f.Close()
-
-		if err != nil {
-			log.Fatalf("Cannot serve static content from %s: %v. Please set a correct folder with the -staticPath option.", path, err)
-		}
-
-		staticPath = path
 	}
 
 	listen()
 }
 
 func listen() {
-	if mysqlURL != "" {
-		log.Printf("Using SQL data store.")
-		repo = data.NewSQLStore("mysql", mysqlURL)
-	} else {
-		log.Printf("Using in-memory data store.")
-		repo = data.NewInMemoryStore()
+	log.Printf("Using in-memory data store.")
+	repo = data.NewInMemoryStore()
 
-		if dataPath != "" {
-			loader.SetBasePath(dataPath)
-		}
-		loader.LoadBundesbankData(loader.DefaultBundesbankPath(), repo)
-		loader.LoadAustriaData(loader.DefaultAustriaPath(), repo)
-		loader.LoadBelgiumData(loader.DefaultBelgiumPath(), repo)
-		loader.LoadLiechtensteinData(loader.DefaultLiechtensteinPath(), repo)
-		loader.LoadLuxembourgData(loader.DefaultLuxembourgPath(), repo)
-		loader.LoadNetherlandsData(loader.DefaultNetherlandsPath(), repo)
-		loader.LoadSwitzerlandData(loader.DefaultSwitzerlandPath(), repo)
+	if dataPath != "" {
+		basePath = dataPath
 	}
+	loader.LoadBundesbankData(filepath.Join(basePath, "bundesbank.txt"), repo)
+	loader.LoadAustriaData(filepath.Join(basePath, "at.csv"), repo)
+	loader.LoadBelgiumData(filepath.Join(basePath, "nbb.xlsx"), repo)
+	loader.LoadLuxembourgData(filepath.Join(basePath, "lu.xlsx"), repo)
+	loader.LoadNetherlandsData(filepath.Join(basePath, "nl.xlsx"), repo)
+	loader.LoadSwitzerlandData(filepath.Join(basePath, "ch.xlsx"), repo)
 
 	router := httprouter.New()
 	corsHandler := cors.New(cors.Options{
@@ -146,16 +123,6 @@ func listen() {
 	})
 
 	router.GET("/validate/:iban", validationHandler)
-	router.GET("/countries", countryCodeHandler)
-	router.GET("/calculate/:countryCode/:bankCode/:accountNumber", calculateIBAN)
-	router.GET("/v2/calculate/:countryCode/:bankCode/:accountNumber", calculateAndValidateIBAN)
-	router.Handler("GET", "/metrics", http.Handler(inmemMetrics))
-
-	//Only host the static template when the ENV is 'Live' or 'Test'
-	if web {
-		log.Printf("Serving static content from folder %s.", staticPath)
-		router.NotFound = http.FileServer(http.Dir(staticPath))
-	}
 
 	listeningInfo := "Listening on %s"
 	handler := corsHandler.Handler(router)
@@ -180,14 +147,8 @@ func listen() {
 	}()
 
 	if strings.ContainsAny(port, ":") {
-		if web {
-			listeningInfo = fmt.Sprintf(listeningInfo, "%s (serving static content from '/').")
-		}
 		addr = port
 	} else {
-		if web {
-			listeningInfo = fmt.Sprintf(listeningInfo, ":%s (serving static content from '/').")
-		}
 		addr = ":" + port
 	}
 
@@ -228,7 +189,6 @@ func validationHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	// hit the cache
 	value, found := hitCache(iban + strconv.FormatBool(config["getBIC"]) + strconv.FormatBool(config["validateBankCode"]))
 	if found {
-		go logFromCacheEntry("", value)
 		fmt.Fprintf(w, value)
 		return
 	}
@@ -278,8 +238,6 @@ func validationHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	w.Header().Add("Content-Length", strconv.Itoa(len(strRes)))
 	// put to cache and render
 
-	go logFromIbanResult("", parsedIban)
-
 	key := iban + strconv.FormatBool(config["getBIC"]) + strconv.FormatBool(config["validateBankCode"])
 
 	c.Set(key, strRes, 0)
@@ -319,25 +277,4 @@ func hitCache(iban string) (string, bool) {
 
 	return "", false
 
-}
-
-// Only logs when metrics is defined
-func logFromCacheEntry(ENV string, value string) {
-	if metrics != nil {
-		metrics.LogRequestFromValidationResult(ENV, value)
-	} else {
-		var result *goiban.ValidationResult
-		json.Unmarshal([]byte(value), &result)
-
-		inmemMetrics.Register(m.ValidationResultToEvent(result))
-	}
-}
-
-// Only logs when metrics is defined
-func logFromIbanResult(ENV string, value *goiban.Iban) {
-	if metrics != nil {
-		metrics.WriteLogRequest(ENV, value)
-	} else {
-		inmemMetrics.Register(m.IbanToEvent(value))
-	}
 }

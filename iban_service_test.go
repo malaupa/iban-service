@@ -2,6 +2,7 @@
 The MIT License (MIT)
 
 Copyright (c) 2014 Chris Grieger
+Copyright (c) 2021 Stefan Schubert
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +31,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/fourcube/goiban-data"
@@ -48,15 +50,11 @@ var repoSQL data.BankDataRepository
 
 func TestMain(m *testing.M) {
 	router := httprouter.New()
-	router.GET("/v2/calculate/:countryCode/:bankCode/:accountNumber", calculateAndValidateIBAN)
-	router.GET("/calculate/:countryCode/:bankCode/:accountNumber", calculateIBAN)
 	router.GET("/validate/:iban", validationHandler)
-	router.GET("/countries", countryCodeHandler)
 	server = httptest.NewServer(router)
 
-	// repoSQL = data.NewSQLStore("mysql", "root:root@/goiban?charset=utf8")
 	repo = data.NewInMemoryStore()
-	loader.LoadBundesbankData(loader.DefaultBundesbankPath(), repo)
+	loader.LoadBundesbankData(filepath.Join("data", "bundesbank.txt"), repo)
 
 	retCode := m.Run()
 	server.Close()

@@ -1,5 +1,5 @@
 *.json
 test/*.html
 *.vr
-goiban-service
+iban-service
 build/
